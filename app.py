@@ -5,12 +5,13 @@ import json
 import os
 from datetime import datetime
 import uuid
+from deep_translator import GoogleTranslator
 
 # -------------------------
 # Configuration
 # -------------------------
 st.set_page_config(
-    page_title="BharathVani - Cultural Heritage Corpus",
+    page_title="🏛️ BharathVani - Cultural Heritage Corpus",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -20,6 +21,26 @@ st.set_page_config(
 USER_FILE = "users.csv"
 CORPUS_FILE = "heritage_corpus.json"
 UPLOAD_DIR = "uploads"
+
+# -------------------------
+# Translation Function
+# -------------------------
+def t(text, target_lang="en"):
+    try:
+        if target_lang == "en":
+            return text
+        return GoogleTranslator(source='auto', target=target_lang).translate(text)
+    except:
+        return text
+
+# -------------------------
+# Sidebar with Language Support
+# -------------------------
+with st.sidebar:
+    st.markdown("### 🏛️ BharathVani")
+    language_list = ['en', 'hi', 'te', 'ta', 'bn', 'kn', 'ml']
+    selected_lang = st.selectbox("🌐 Select Language", language_list, index=0)
+    st.session_state['lang'] = selected_lang
 
 # -------------------------
 # Authentication Functions
@@ -81,7 +102,7 @@ def get_user_location():
                     'postal_code': data.get('postal', '')
                 }
     except Exception as e:
-        st.warning(f"🌐 Location detection error: {e}")
+        st.warning(t(f"🌐 Location detection error: {e}", st.session_state['lang']))
     return None
 
 def search_place_info(place_name):
@@ -98,7 +119,7 @@ def search_place_info(place_name):
                 'url': wiki_data.get('content_urls', {}).get('desktop', {}).get('page')
             }
     except Exception as e:
-        st.warning(f"Wikipedia search failed: {str(e)}")
+        st.warning(t(f"Wikipedia search failed: {str(e)}", st.session_state['lang']))
 
     try:
         osm_url = "https://nominatim.openstreetmap.org/search"
@@ -115,7 +136,7 @@ def search_place_info(place_name):
             if osm_data:
                 results['openstreetmap'] = osm_data[0]
     except Exception as e:
-        st.warning(f"OpenStreetMap search failed: {str(e)}")
+        st.warning(t(f"OpenStreetMap search failed: {str(e)}", st.session_state['lang']))
     return results
 
 def save_corpus_entry(entry):
@@ -175,7 +196,6 @@ def apply_custom_styles():
             background: linear-gradient(125deg, #181c22 0%, #111111 100%) !important;
             min-height: 100vh;
         }
-        
         .main-header {
             font-family: 'Montserrat', sans-serif;
             font-size: 2.5rem; font-weight: 800; letter-spacing: 2px;
@@ -185,14 +205,12 @@ def apply_custom_styles():
             color: transparent; -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 2px 20px rgba(52,152,219,0.13));
         }
-        
         .auth-form {
             max-width: 410px; margin: 0 auto; padding: 32px 20px 24px 20px;
             border-radius: 22px; background: rgba(30,30,30,0.97);
             box-shadow: 0 10px 40px 0 rgba(44,62,80,0.23);
             border: 2px solid #3498db44; backdrop-filter: blur(2.5px);
         }
-        
         .stTextInput > div > input {
             background: rgba(52, 152, 219, 0.08);
             border-radius: 12px; padding: 10px 16px;
@@ -201,17 +219,14 @@ def apply_custom_styles():
             box-shadow: 0 1px 6px rgba(44,62,80,0.18);
             transition: border 0.32s, background 0.32s;
         }
-        
         .stTextInput > div > input:focus {
             border: 2.5px solid #3498db; background: #222;
             outline: none;
         }
-        
         .stTextInput > label {
             color: #e67e22; font-family: 'Montserrat', sans-serif;
             font-size: 1rem; margin-bottom: 3px;
         }
-        
         .stButton > button {
             background: linear-gradient(90deg, #3498db 58%, #e67e22 100%);
             color: #fff !important; border: none !important;
@@ -220,13 +235,11 @@ def apply_custom_styles():
             transition: background 0.32s, transform 0.14s;
             padding: 10px 0;
         }
-        
         .stButton > button:hover {
             background: linear-gradient(90deg, #e67e22 62%, #3498db 100%);
             color: #fff !important; transform: scale(1.04);
             box-shadow: 0 4px 20px rgba(52,152,219,0.19);
         }
-        
         .welcome-message {
             background: rgba(52, 152, 219, 0.1);
             border-left: 4px solid #3498db;
@@ -235,7 +248,6 @@ def apply_custom_styles():
             border-radius: 5px;
             color: #fff;
         }
-        
         .metric-card {
             background: rgba(30,30,30,0.8);
             border-radius: 12px;
@@ -251,48 +263,48 @@ def show_authentication():
     st.markdown('<div class="main-header">🏛️ BharathVani</div>', unsafe_allow_html=True)
     
     with st.form("auth_form", clear_on_submit=True):
-        st.markdown("### 🔐 Authentication")
-        username = st.text_input("Username", placeholder="Enter your username")
-        password = st.text_input("Password", type="password", placeholder="Enter your password")
+        st.markdown(f"### 🔐 {t('Authentication', st.session_state['lang'])}")
+        username = st.text_input(t("Username", st.session_state['lang']), placeholder=t("Enter your username", st.session_state['lang']))
+        password = st.text_input(t("Password", st.session_state['lang']), type="password", placeholder=t("Enter your password", st.session_state['lang']))
         
         col1, col2 = st.columns(2)
         with col1:
-            login = st.form_submit_button("🔑 Login")
+            login = st.form_submit_button(t("🔑 Login", st.session_state['lang']))
         with col2:
-            signup = st.form_submit_button("📝 Sign Up")
+            signup = st.form_submit_button(t("📝 Sign Up", st.session_state['lang']))
         
         if login and username and password:
             if login_user(username, password):
                 st.session_state.user = username
-                st.success("Login successful!")
+                st.success(t("Login successful!", st.session_state['lang']))
                 st.rerun()
             else:
-                st.error("❌ Username or password incorrect.")
+                st.error(t("❌ Username or password incorrect.", st.session_state['lang']))
         elif signup and username and password:
             result = save_user(username, password)
             if result is None:
-                st.error("❌ Both username and password are required.")
+                st.error(t("❌ Both username and password are required.", st.session_state['lang']))
             elif result is False:
-                st.error("❌ Username already exists. Please log in.")
+                st.error(t("❌ Username already exists. Please log in.", st.session_state['lang']))
             elif result:
                 st.session_state.user = username
-                st.success("Account created successfully!")
+                st.success(t("Account created successfully!", st.session_state['lang']))
                 st.rerun()
         elif (login or signup) and not (username and password):
-            st.warning("⚠️ Please fill all fields!")
+            st.warning(t("⚠️ Please fill all fields!", st.session_state['lang']))
 
 def show_sidebar():
     """Display sidebar navigation"""
     with st.sidebar:
         st.markdown("### 🏛️ BharathVani")
-        st.markdown(f"**Welcome, {st.session_state.user}!**")
+        st.markdown(f"**{t('Welcome', st.session_state['lang'])}, {st.session_state.user}!**")
         
         # Navigation
-        page = st.radio("📍 Navigate", [
-            "📊 Collect Heritage Data", 
-            "📚 Browse Corpus", 
-            "📈 View Statistics",
-            "👤 Profile"
+        page = st.radio(t("📍 Navigate", st.session_state['lang']), [
+            t("📊 Collect Heritage Data", st.session_state['lang']), 
+            t("📚 Browse Corpus", st.session_state['lang']), 
+            t("📈 View Statistics", st.session_state['lang']),
+            t("👤 Profile", st.session_state['lang'])
         ])
         
         # Quick stats
@@ -300,19 +312,19 @@ def show_sidebar():
         user_entries = [entry for entry in corpus_data if entry.get('contributor_name') == st.session_state.user]
         
         st.markdown("---")
-        st.markdown("### 📊 Quick Stats")
-        st.metric("Your Entries", len(user_entries))
-        st.metric("Total Entries", len(corpus_data))
+        st.markdown(f"### {t('📊 Quick Stats', st.session_state['lang'])}")
+        st.metric(t("Your Entries", st.session_state['lang']), len(user_entries))
+        st.metric(t("Total Entries", st.session_state['lang']), len(corpus_data))
         
         # Connection status
         try:
             requests.get("https://www.google.com", timeout=3)
-            st.success("🌐 Online")
+            st.success(t("🌐 Online", st.session_state['lang']))
         except:
-            st.warning("📴 Offline")
+            st.warning(t("📴 Offline", st.session_state['lang']))
         
         st.markdown("---")
-        if st.button("🚪 Logout"):
+        if st.button(t("🚪 Logout", st.session_state['lang'])):
             st.session_state.user = None
             st.rerun()
         
@@ -321,74 +333,79 @@ def show_sidebar():
 def show_location_info(location_data):
     """Display location information"""
     if location_data:
-        st.success(f"📍 Detected Location: {location_data['city']}, {location_data['region']}, {location_data['country']}")
-        st.write(f"**Coordinates:** {location_data['latitude']:.4f}, {location_data['longitude']:.4f}")
+        st.success(t(f"📍 Detected Location: {location_data['city']}, {location_data['region']}, {location_data['country']}", st.session_state['lang']))
+        st.write(f"{t('**Coordinates:**', st.session_state['lang'])} {location_data['latitude']:.4f}, {location_data['longitude']:.4f}")
     else:
-        st.warning("📍 Unable to detect location automatically")
+        st.warning(t("📍 Unable to detect location automatically", st.session_state['lang']))
 
 def show_data_collection_form():
     """Display data collection form"""
-    st.markdown('<div class="main-header">📊 Cultural Heritage Data Collection</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="main-header">{t("📊 Cultural Heritage Data Collection", st.session_state["lang"])}</div>', unsafe_allow_html=True)
     
     location_data = get_user_location()
     show_location_info(location_data)
 
     with st.form("corpus_collection_form"):
-        st.subheader("📝 Place & Cultural Information")
+        st.subheader(t("📝 Place & Cultural Information", st.session_state['lang']))
 
         col1, col2 = st.columns(2)
         with col1:
-            place_name = st.text_input("Place Name *", placeholder="Enter the place name")
-            category = st.selectbox("Category *", [
-                "Monument", "Temple", "Festival", "Tradition", "Craft", 
-                "Music", "Dance", "Literature", "Architecture", "Other"
+            place_name = st.text_input(t("Place Name *", st.session_state['lang']), placeholder=t("Enter the place name", st.session_state['lang']))
+            category = st.selectbox(t("Category *", st.session_state['lang']), [
+                t("Monument", st.session_state['lang']), t("Temple", st.session_state['lang']),
+                t("Festival", st.session_state['lang']), t("Tradition", st.session_state['lang']),
+                t("Craft", st.session_state['lang']), t("Music", st.session_state['lang']),
+                t("Dance", st.session_state['lang']), t("Literature", st.session_state['lang']),
+                t("Architecture", st.session_state['lang']), t("Other", st.session_state['lang'])
             ])
-            language = st.text_input("Language", placeholder="e.g., Hindi, Telugu, English")
+            language = st.text_input(t("Language", st.session_state['lang']), placeholder=t("e.g., Hindi, Telugu, English", st.session_state['lang']))
         with col2:
             location_display = f"{location_data['city']}, {location_data['region']}" if location_data else ""
-            manual_location = st.text_input("Location", value=location_display)
-            historical_period = st.selectbox("Historical Period", [
-                "Ancient", "Medieval", "Colonial", "Modern", "Contemporary", "Unknown"
+            manual_location = st.text_input(t("Location", st.session_state['lang']), value=location_display)
+            historical_period = st.selectbox(t("Historical Period", st.session_state['lang']), [
+                t("Ancient", st.session_state['lang']), t("Medieval", st.session_state['lang']),
+                t("Colonial", st.session_state['lang']), t("Modern", st.session_state['lang']),
+                t("Contemporary", st.session_state['lang']), t("Unknown", st.session_state['lang'])
             ])
-            tags = st.text_input("Tags (comma-separated)", placeholder="temple, folklore, craft, etc.")
+            tags = st.text_input(t("Tags (comma-separated)", st.session_state['lang']), placeholder=t("temple, folklore, craft, etc.", st.session_state['lang']))
 
         # Coordinates
         col1, col2 = st.columns(2)
         with col1:
-            latitude = st.number_input("Latitude", 
+            latitude = st.number_input(t("Latitude", st.session_state['lang']), 
                 value=location_data['latitude'] if location_data else 0.0,
                 format="%.6f")
         with col2:
-            longitude = st.number_input("Longitude", 
+            longitude = st.number_input(t("Longitude", st.session_state['lang']), 
                 value=location_data['longitude'] if location_data else 0.0,
                 format="%.6f")
 
-        st.subheader("📋 Content Details")
-        title = st.text_input("Title *", placeholder="Give a descriptive title")
-        description = st.text_area("Description *", 
-            placeholder="Describe this place, tradition, or cultural element...", 
+        st.subheader(t("📋 Content Details", st.session_state['lang']))
+        title = st.text_input(t("Title *", st.session_state['lang']), placeholder=t("Give a descriptive title", st.session_state['lang']))
+        description = st.text_area(t("Description *", st.session_state['lang']), 
+            placeholder=t("Describe this place, tradition, or cultural element...", st.session_state['lang']), 
             height=150)
-        significance = st.text_area("Cultural Significance", 
-            placeholder="Why is it culturally or historically significant?", 
+        significance = st.text_area(t("Cultural Significance", st.session_state['lang']), 
+            placeholder=t("Why is it culturally or historically significant?", st.session_state['lang']), 
             height=100)
-        sources = st.text_area("Sources/References", 
-            placeholder="Mention your sources if any", 
+        sources = st.text_area(t("Sources/References", st.session_state['lang']), 
+            placeholder=t("Mention your sources if any", st.session_state['lang']), 
             height=100)
 
-        st.subheader("📁 Upload Media")
+        st.subheader(t("📁 Upload Media", st.session_state['lang']))
         uploaded_files = st.file_uploader(
-            "Upload files (images, audio, video, documents)",
+            t("Upload files (images, audio, video, documents)", st.session_state['lang']),
             type=['jpg', 'jpeg', 'png', 'mp4', 'mp3', 'wav', 'pdf', 'txt', 'doc', 'docx'],
             accept_multiple_files=True
         )
 
-        auto_search = st.checkbox("🔍 Automatically fetch information from Wikipedia & OpenStreetMap")
+        auto_search = st.checkbox(t("🔍 Automatically fetch information from Wikipedia & OpenStreetMap", st.session_state['lang']))
 
-        submitted = st.form_submit_button("🚀 Submit Entry")
+        submitted = st.form_submit_button(t("🚀 Submit Entry", st.session_state['lang']))
 
         if submitted:
             if not place_name or not title or not description:
-                st.error("❌ Please fill in required fields: Place Name, Title, and Description.")
+                st.error(t("❌ Please fill in required fields: Place Name, Title, and Description.", st.session_state['lang']))
                 return
 
             entry = {
@@ -430,67 +447,67 @@ def show_data_collection_form():
 
             # Auto-search functionality
             if auto_search:
-                with st.spinner("🔍 Searching for additional information..."):
+                with st.spinner(t("🔍 Searching for additional information...", st.session_state['lang'])):
                     search_results = search_place_info(place_name)
                     if search_results:
-                        st.success("✅ Additional information found!")
+                        st.success(t("✅ Additional information found!", st.session_state['lang']))
                         
                         if 'wikipedia' in search_results:
                             wiki = search_results['wikipedia']
-                            st.markdown("### 📖 Wikipedia Summary")
+                            st.markdown(f"### {t('📖 Wikipedia Summary', st.session_state['lang'])}")
                             st.write(f"**{wiki['title']}**")
                             st.write(wiki['extract'])
                             if wiki.get('url'):
-                                st.markdown(f"[📖 Read More on Wikipedia]({wiki['url']})")
+                                st.markdown(f"[{t('📖 Read More on Wikipedia', st.session_state['lang'])}]({wiki['url']})")
                         
                         if 'openstreetmap' in search_results:
                             osm = search_results['openstreetmap']
-                            st.markdown("### 🗺️ OpenStreetMap Information")
-                            st.write(f"**Location:** {osm.get('display_name', 'N/A')}")
-                            st.write(f"**Type:** {osm.get('type', 'N/A')}")
+                            st.markdown(f"### {t('🗺️ OpenStreetMap Information', st.session_state['lang'])}")
+                            st.write(f"**{t('Location', st.session_state['lang'])}:** {osm.get('display_name', 'N/A')}")
+                            st.write(f"**{t('Type', st.session_state['lang'])}:** {osm.get('type', 'N/A')}")
 
-            st.success("✅ Entry saved successfully!")
+            st.success(t("✅ Entry saved successfully!", st.session_state['lang']))
             st.balloons()
-            st.info(f"Entry ID: {entry_id}")
+            st.info(f"{t('Entry ID', st.session_state['lang'])}: {entry_id}")
 
 def show_corpus_browser():
     """Display corpus browser"""
-    st.markdown('<div class="main-header">📚 Heritage Corpus Browser</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="main-header">{t("📚 Heritage Corpus Browser", st.session_state["lang"])}</div>', unsafe_allow_html=True)
     
     corpus_data = load_corpus_data()
 
     if not corpus_data:
-        st.info("📭 No corpus data available yet. Start by collecting some heritage data!")
+        st.info(t("📭 No corpus data available yet. Start by collecting some heritage data!", st.session_state['lang']))
         return
 
     # Summary statistics
-    st.subheader("📊 Corpus Summary")
+    st.subheader(t("📊 Corpus Summary", st.session_state['lang']))
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Total Entries", len(corpus_data))
+        st.metric(t("Total Entries", st.session_state['lang']), len(corpus_data))
     with col2:
         categories = set(item.get('category', 'Unknown') for item in corpus_data)
-        st.metric("Categories", len(categories))
+        st.metric(t("Categories", st.session_state['lang']), len(categories))
     with col3:
         locations = set(item.get('location', '') for item in corpus_data if item.get('location'))
-        st.metric("Locations", len(locations))
+        st.metric(t("Locations", st.session_state['lang']), len(locations))
     with col4:
         total_files = sum(len(item.get('uploaded_files', [])) for item in corpus_data)
-        st.metric("Media Files", total_files)
+        st.metric(t("Media Files", st.session_state['lang']), total_files)
 
     # Filters
-    st.subheader("🔍 Filter & Search")
+    st.subheader(t("🔍 Filter & Search", st.session_state['lang']))
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        search_term = st.text_input("🔍 Search keyword", placeholder="Search in titles and descriptions")
+        search_term = st.text_input(t("🔍 Search keyword", st.session_state['lang']), placeholder=t("Search in titles and descriptions", st.session_state['lang']))
     with col2:
         all_categories = sorted(set(item.get('category', 'Unknown') for item in corpus_data))
-        category_filter = st.selectbox("📂 Filter by Category", ["All"] + all_categories)
+        category_filter = st.selectbox(t("📂 Filter by Category", st.session_state['lang']), [t("All", st.session_state['lang'])] + all_categories)
     with col3:
         all_contributors = sorted(set(item.get('contributor_name', 'Unknown') for item in corpus_data))
-        contributor_filter = st.selectbox("👤 Filter by Contributor", ["All"] + all_contributors)
+        contributor_filter = st.selectbox(t("👤 Filter by Contributor", st.session_state['lang']), [t("All", st.session_state['lang'])] + all_contributors)
 
     # Apply filters
     filtered_data = corpus_data
@@ -500,52 +517,52 @@ def show_corpus_browser():
             if search_term.lower() in item.get('title', '').lower() or 
                search_term.lower() in item.get('description', '').lower()
         ]
-    if category_filter != "All":
+    if category_filter != t("All", st.session_state['lang']):
         filtered_data = [item for item in filtered_data if item.get('category') == category_filter]
-    if contributor_filter != "All":
+    if contributor_filter != t("All", st.session_state['lang']):
         filtered_data = [item for item in filtered_data if item.get('contributor_name') == contributor_filter]
 
     # Display results
-    st.subheader(f"📋 Results ({len(filtered_data)} entries)")
+    st.subheader(f"{t('📋 Results', st.session_state['lang'])} ({len(filtered_data)} {t('entries', st.session_state['lang'])})")
     
     for item in filtered_data:
-        with st.expander(f"🏛️ {item.get('title', 'Untitled')} — {item.get('place_name', 'Unknown Location')}"):
+        with st.expander(f"🏛️ {item.get('title', t('Untitled', st.session_state['lang']))} — {item.get('place_name', t('Unknown Location', st.session_state['lang']))}"):
             col1, col2 = st.columns([2, 1])
             
             with col1:
-                st.write(f"**Description:** {item.get('description', 'No description available')}")
+                st.write(f"**{t('Description', st.session_state['lang'])}:** {item.get('description', t('No description available', st.session_state['lang']))}")
                 if item.get('significance'):
-                    st.write(f"**Cultural Significance:** {item.get('significance')}")
+                    st.write(f"**{t('Cultural Significance', st.session_state['lang'])}:** {item.get('significance')}")
                 if item.get('sources'):
-                    st.write(f"**Sources:** {item.get('sources')}")
+                    st.write(f"**{t('Sources', st.session_state['lang'])}:** {item.get('sources')}")
                 
             with col2:
-                st.write(f"**📂 Category:** {item.get('category', 'Unknown')}")
-                st.write(f"**📍 Location:** {item.get('location', 'Unknown')}")
-                st.write(f"**🕐 Period:** {item.get('historical_period', 'Unknown')}")
-                st.write(f"**🗣️ Language:** {item.get('language', 'Unknown')}")
-                st.write(f"**👤 Contributor:** {item.get('contributor_name', 'Anonymous')}")
-                st.write(f"**📅 Added:** {item.get('created_date', 'Unknown')}")
+                st.write(f"**📂 {t('Category', st.session_state['lang'])}:** {item.get('category', t('Unknown', st.session_state['lang']))}")
+                st.write(f"**📍 {t('Location', st.session_state['lang'])}:** {item.get('location', t('Unknown', st.session_state['lang']))}")
+                st.write(f"**🕐 {t('Period', st.session_state['lang'])}:** {item.get('historical_period', t('Unknown', st.session_state['lang']))}")
+                st.write(f"**🗣️ {t('Language', st.session_state['lang'])}:** {item.get('language', t('Unknown', st.session_state['lang']))}")
+                st.write(f"**👤 {t('Contributor', st.session_state['lang'])}:** {item.get('contributor_name', t('Anonymous', st.session_state['lang']))}")
+                st.write(f"**📅 {t('Added', st.session_state['lang'])}:** {item.get('created_date', t('Unknown', st.session_state['lang']))}")
                 
                 if item.get('uploaded_files'):
-                    st.write(f"**📎 Files:** {len(item.get('uploaded_files', []))}")
+                    st.write(f"**📎 {t('Files', st.session_state['lang'])}:** {len(item.get('uploaded_files', []))}")
                 
                 if item.get('tags'):
-                    st.write(f"**🏷️ Tags:** {', '.join(item.get('tags', []))}")
+                    st.write(f"**🏷️ {t('Tags', st.session_state['lang'])}:** {', '.join(item.get('tags', []))}")
 
 def show_statistics():
     """Display corpus statistics"""
-    st.markdown('<div class="main-header">📈 Corpus Statistics</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="main-header">{t("📈 Corpus Statistics", st.session_state["lang"])}</div>', unsafe_allow_html=True)
     
     corpus_data = load_corpus_data()
     
     if not corpus_data:
-        st.info("📭 No data available for statistics yet.")
+        st.info(t("📭 No data available for statistics yet.", st.session_state['lang']))
         return
 
     # Category distribution
-    st.subheader("📊 Category Distribution")
-    categories = [item.get('category', 'Unknown') for item in corpus_data]
+    st.subheader(t("📊 Category Distribution", st.session_state['lang']))
+    categories = [item.get('category', t('Unknown', st.session_state['lang'])) for item in corpus_data]
     category_counts = {}
     for cat in categories:
         category_counts[cat] = category_counts.get(cat, 0) + 1
@@ -554,8 +571,8 @@ def show_statistics():
         st.bar_chart(category_counts)
 
     # Timeline
-    st.subheader("📅 Entries Timeline")
-    dates = [item.get('created_date', 'Unknown') for item in corpus_data]
+    st.subheader(t("📅 Entries Timeline", st.session_state['lang']))
+    dates = [item.get('created_date', t('Unknown', st.session_state['lang'])) for item in corpus_data]
     date_counts = {}
     for date in dates:
         date_counts[date] = date_counts.get(date, 0) + 1
@@ -564,8 +581,8 @@ def show_statistics():
         st.line_chart(date_counts)
 
     # Contributor stats
-    st.subheader("👥 Top Contributors")
-    contributors = [item.get('contributor_name', 'Anonymous') for item in corpus_data]
+    st.subheader(t("👥 Top Contributors", st.session_state['lang']))
+    contributors = [item.get('contributor_name', t('Anonymous', st.session_state['lang'])) for item in corpus_data]
     contributor_counts = {}
     for contrib in contributors:
         contributor_counts[contrib] = contributor_counts.get(contrib, 0) + 1
@@ -575,9 +592,9 @@ def show_statistics():
     
     col1, col2 = st.columns(2)
     with col1:
-        st.write("**Contributor Rankings:**")
+        st.write(f"**{t('Contributor Rankings', st.session_state['lang'])}:**")
         for i, (name, count) in enumerate(sorted_contributors[:10], 1):
-            st.write(f"{i}. {name}: {count} entries")
+            st.write(f"{i}. {name}: {count} {t('entries', st.session_state['lang'])}")
     
     with col2:
         if sorted_contributors:
@@ -585,37 +602,37 @@ def show_statistics():
 
 def show_profile():
     """Display user profile"""
-    st.markdown('<div class="main-header">👤 User Profile</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="main-header">{t("👤 User Profile", st.session_state["lang"])}</div>', unsafe_allow_html=True)
     
     corpus_data = load_corpus_data()
     user_entries = [entry for entry in corpus_data if entry.get('contributor_name') == st.session_state.user]
     
-    st.subheader(f"Profile: {st.session_state.user}")
+    st.subheader(f"{t('Profile', st.session_state['lang'])}: {st.session_state.user}")
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Your Entries", len(user_entries))
+        st.metric(t("Your Entries", st.session_state['lang']), len(user_entries))
     with col2:
-        user_categories = set(entry.get('category', 'Unknown') for entry in user_entries)
-        st.metric("Categories Covered", len(user_categories))
+        user_categories = set(entry.get('category', t('Unknown', st.session_state['lang'])) for entry in user_entries)
+        st.metric(t("Categories Covered", st.session_state['lang']), len(user_categories))
     with col3:
         user_files = sum(len(entry.get('uploaded_files', [])) for entry in user_entries)
-        st.metric("Files Uploaded", user_files)
+        st.metric(t("Files Uploaded", st.session_state['lang']), user_files)
     
     if user_entries:
-        st.subheader("📝 Your Recent Entries")
+        st.subheader(t("📝 Your Recent Entries", st.session_state['lang']))
         # Sort by timestamp, newest first
         sorted_entries = sorted(user_entries, key=lambda x: x.get('timestamp', ''), reverse=True)
         
         for entry in sorted_entries[:5]:  # Show last 5 entries
-            with st.expander(f"{entry.get('title', 'Untitled')} - {entry.get('created_date', 'Unknown')}"):
-                st.write(f"**Place:** {entry.get('place_name', 'Unknown')}")
-                st.write(f"**Category:** {entry.get('category', 'Unknown')}")
-                st.write(f"**Description:** {entry.get('description', 'No description')}")
+            with st.expander(f"{entry.get('title', t('Untitled', st.session_state['lang']))} - {entry.get('created_date', t('Unknown', st.session_state['lang']))}"):
+                st.write(f"**{t('Place', st.session_state['lang'])}:** {entry.get('place_name', t('Unknown', st.session_state['lang']))}")
+                st.write(f"**{t('Category', st.session_state['lang'])}:** {entry.get('category', t('Unknown', st.session_state['lang']))}")
+                st.write(f"**{t('Description', st.session_state['lang'])}:** {entry.get('description', t('No description', st.session_state['lang']))}")
                 if entry.get('uploaded_files'):
-                    st.write(f"**Files:** {len(entry.get('uploaded_files', []))}")
+                    st.write(f"**{t('Files', st.session_state['lang'])}:** {len(entry.get('uploaded_files', []))}")
     else:
-        st.info("🌟 You haven't created any entries yet. Start collecting heritage data!")
+        st.info(t("🌟 You haven't created any entries yet. Start collecting heritage data!", st.session_state['lang']))
 
 # -------------------------
 # Main Application
@@ -639,13 +656,13 @@ def main():
         # Show main application
         page = show_sidebar()
         
-        if page == "📊 Collect Heritage Data":
+        if page == t("📊 Collect Heritage Data", st.session_state['lang']):
             show_data_collection_form()
-        elif page == "📚 Browse Corpus":
+        elif page == t("📚 Browse Corpus", st.session_state['lang']):
             show_corpus_browser()
-        elif page == "📈 View Statistics":
+        elif page == t("📈 View Statistics", st.session_state['lang']):
             show_statistics()
-        elif page == "👤 Profile":
+        elif page == t("👤 Profile", st.session_state['lang']):
             show_profile()
 
 if __name__ == "__main__":
