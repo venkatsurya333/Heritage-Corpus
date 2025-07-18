@@ -85,26 +85,47 @@ def login_user(username, password):
 # Location & Data Functions
 # -------------------------
 def get_user_location():
-    """Get user's current location using IP geolocation"""
-    try:
-        response = requests.get("https://ipapi.co/json/", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            lat = data.get('latitude')
-            lon = data.get('longitude')
-            if lat is not None and lon is not None:
-                return {
-                    'latitude': lat,
-                    'longitude': lon,
-                    'city': data.get('city', 'Unknown'),
-                    'region': data.get('region', ''),
-                    'country': data.get('country_name', ''),
-                    'postal_code': data.get('postal', '')
-                }
-    except Exception as e:
-        st.warning(t(f"🌐 Location detection error: {e}", st.session_state['lang']))
+    """Get user's current location using multiple IP geolocation services"""
+    location_sources = [
+        ("ipapi", "https://ipapi.co/json/", lambda data: {
+            'latitude': data.get('latitude'),
+            'longitude': data.get('longitude'),
+            'city': data.get('city', 'Unknown'),
+            'region': data.get('region', ''),
+            'country': data.get('country_name', ''),
+            'postal_code': data.get('postal', '')
+        }),
+        ("ipinfo", "https://ipinfo.io/json", lambda data: {
+            # ipinfo provides "loc": "lat,lon"
+            'latitude': float(data.get('loc', '0,0').split(',')[0]),
+            'longitude': float(data.get('loc', '0,0').split(',')[1]),
+            'city': data.get('city', 'Unknown'),
+            'region': data.get('region', ''),
+            'country': data.get('country', ''),
+            'postal_code': data.get('postal', '')
+        }),
+        ("geoplugin", "http://www.geoplugin.net/json.gp", lambda data: {
+            'latitude': float(data.get('geoplugin_latitude', 0.0)),
+            'longitude': float(data.get('geoplugin_longitude', 0.0)),
+            'city': data.get('geoplugin_city', 'Unknown'),
+            'region': data.get('geoplugin_region', ''),
+            'country': data.get('geoplugin_countryName', ''),
+            'postal_code': data.get('geoplugin_postCode', '')
+        })
+    ]
+    for src, url, extractor in location_sources:
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                loc = extractor(data)
+                if loc['latitude'] and loc['longitude']:
+                    return loc
+        except Exception as e:
+            st.warning(f"🌐 {src} location detection error: {e}")
+    # If all fail, prompt user for manual input next time in UI
+    st.warning("📍 Unable to detect location automatically. Please enter your coordinates manually.")
     return None
-
 def search_place_info(place_name):
     """Search for place information from Wikipedia and OpenStreetMap"""
     results = {}
