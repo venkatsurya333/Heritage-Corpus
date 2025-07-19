@@ -38,9 +38,21 @@ def t(text, target_lang="en"):
 # -------------------------
 with st.sidebar:
     st.markdown("### 🏛️ BharathVani")
-    language_list = ['en', 'hi', 'te', 'ta', 'bn', 'kn', 'ml']
-    selected_lang = st.selectbox("🌐 Select Language", language_list, index=0)
-    st.session_state['lang'] = selected_lang
+    # Display names with native script
+    language_display = ['English', 'हिन्दी', 'తెలుగు', 'தமிழ்', 'বাংলা', 'ಕನ್ನಡ', 'മലയാളം']
+    # Corresponding language codes for translation
+    language_codes = {
+        'English': 'en',
+        'हिन्दी': 'hi',
+        'తెలుగు': 'te',
+        'தமிழ்': 'ta',
+        'বাংলা': 'bn',
+        'ಕನ್ನಡ': 'kn',
+        'മലയാളം': 'ml'
+    }
+    selected_display = st.selectbox("🌐 Select Language", language_display, index=0)
+    selected_code = language_codes[selected_display]
+    st.session_state['lang'] = selected_code
 
 # -------------------------
 # Authentication Functions
