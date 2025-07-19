@@ -11,7 +11,7 @@ from deep_translator import GoogleTranslator
 # Configuration
 # -------------------------
 st.set_page_config(
-    page_title="BharathVani - Cultural Heritage Corpus",
+    page_title="🏛️ BharathVani - Cultural Heritage Corpus",
     page_icon="🏛️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -46,11 +46,9 @@ with st.sidebar:
 # Authentication Functions
 # -------------------------
 def reset_user_file():
-    """Initialize or reset user file"""
     pd.DataFrame(columns=["username", "password"]).to_csv(USER_FILE, index=False)
 
 def save_user(username, password):
-    """Save new user to CSV file"""
     username, password = username.strip(), password.strip()
     if not (username and password):
         return None
@@ -67,7 +65,6 @@ def save_user(username, password):
     return True
 
 def get_user(username):
-    """Get user from CSV file"""
     if not os.path.exists(USER_FILE):
         reset_user_file()
     df = pd.read_csv(USER_FILE)
@@ -75,59 +72,47 @@ def get_user(username):
     return user_df.iloc[0] if not user_df.empty else None
 
 def login_user(username, password):
-    """Authenticate user login"""
     user = get_user(username)
     if user is None:
         return False
     return user["password"] == password
 
 # -------------------------
-# Location & Data Functions
+# Location & Data Functions (Improved)
 # -------------------------
+from streamlit_js_eval import get_geolocation
+
+def get_city_name(lat, lon):
+    try:
+        response = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"format": "jsonv2", "lat": lat, "lon": lon},
+            headers={"User-Agent": "StreamlitApp/1.0"}
+        )
+        address = response.json().get("address", {})
+        return address.get("city") or address.get("town") or address.get("village") or address.get("state")
+    except:
+        return "Unknown"
+
 def get_user_location():
-    """Get user's current location using multiple IP geolocation services"""
-    location_sources = [
-        ("ipapi", "https://ipapi.co/json/", lambda data: {
-            'latitude': data.get('latitude'),
-            'longitude': data.get('longitude'),
-            'city': data.get('city', 'Unknown'),
-            'region': data.get('region', ''),
-            'country': data.get('country_name', ''),
-            'postal_code': data.get('postal', '')
-        }),
-        ("ipinfo", "https://ipinfo.io/json", lambda data: {
-            # ipinfo provides "loc": "lat,lon"
-            'latitude': float(data.get('loc', '0,0').split(',')[0]),
-            'longitude': float(data.get('loc', '0,0').split(',')[1]),
-            'city': data.get('city', 'Unknown'),
-            'region': data.get('region', ''),
-            'country': data.get('country', ''),
-            'postal_code': data.get('postal', '')
-        }),
-        ("geoplugin", "http://www.geoplugin.net/json.gp", lambda data: {
-            'latitude': float(data.get('geoplugin_latitude', 0.0)),
-            'longitude': float(data.get('geoplugin_longitude', 0.0)),
-            'city': data.get('geoplugin_city', 'Unknown'),
-            'region': data.get('geoplugin_region', ''),
-            'country': data.get('geoplugin_countryName', ''),
-            'postal_code': data.get('geoplugin_postCode', '')
-        })
-    ]
-    for src, url, extractor in location_sources:
-        try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                loc = extractor(data)
-                if loc['latitude'] and loc['longitude']:
-                    return loc
-        except Exception as e:
-            st.warning(f"🌐 {src} location detection error: {e}")
-    # If all fail, prompt user for manual input next time in UI
-    st.warning("📍 Unable to detect location automatically. Please enter your coordinates manually.")
-    return None
+    """Get user's location from browser geolocation and reverse geocode."""
+    gps = get_geolocation()
+    if gps and "coords" in gps:
+        lat = gps["coords"]["latitude"]
+        lon = gps["coords"]["longitude"]
+        city = get_city_name(lat, lon)
+        return {
+            'latitude': lat,
+            'longitude': lon,
+            'city': city,
+            'region': "",
+            'country': "",
+            'postal_code': ""
+        }
+    else:
+        return None
+
 def search_place_info(place_name):
-    """Search for place information from Wikipedia and OpenStreetMap"""
     results = {}
     try:
         wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{place_name.replace(' ', '_')}"
@@ -161,7 +146,6 @@ def search_place_info(place_name):
     return results
 
 def save_corpus_entry(entry):
-    """Save corpus entry to JSON file"""
     if os.path.exists(CORPUS_FILE):
         try:
             with open(CORPUS_FILE, 'r', encoding='utf-8') as f:
@@ -181,7 +165,6 @@ def save_corpus_entry(entry):
     return entry['id']
 
 def load_corpus_data():
-    """Load corpus data from JSON file"""
     if os.path.exists(CORPUS_FILE):
         try:
             with open(CORPUS_FILE, 'r', encoding='utf-8') as f:
@@ -191,7 +174,6 @@ def load_corpus_data():
     return []
 
 def save_uploaded_file(uploaded_file, entry_id):
-    """Save uploaded file to disk"""
     if uploaded_file is None:
         return None
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -210,7 +192,6 @@ def save_uploaded_file(uploaded_file, entry_id):
 # UI Components
 # -------------------------
 def apply_custom_styles():
-    """Apply custom CSS styling"""
     st.markdown("""
         <style>
         .stApp {
@@ -280,20 +261,16 @@ def apply_custom_styles():
     """, unsafe_allow_html=True)
 
 def show_authentication():
-    """Display authentication form"""
     st.markdown('<div class="main-header">🏛️ BharathVani</div>', unsafe_allow_html=True)
-    
     with st.form("auth_form", clear_on_submit=True):
         st.markdown(f"### 🔐 {t('Authentication', st.session_state['lang'])}")
         username = st.text_input(t("Username", st.session_state['lang']), placeholder=t("Enter your username", st.session_state['lang']))
         password = st.text_input(t("Password", st.session_state['lang']), type="password", placeholder=t("Enter your password", st.session_state['lang']))
-        
         col1, col2 = st.columns(2)
         with col1:
             login = st.form_submit_button(t("🔑 Login", st.session_state['lang']))
         with col2:
             signup = st.form_submit_button(t("📝 Sign Up", st.session_state['lang']))
-        
         if login and username and password:
             if login_user(username, password):
                 st.session_state.user = username
@@ -315,60 +292,46 @@ def show_authentication():
             st.warning(t("⚠️ Please fill all fields!", st.session_state['lang']))
 
 def show_sidebar():
-    """Display sidebar navigation"""
     with st.sidebar:
         st.markdown("### 🏛️ BharathVani")
         st.markdown(f"**{t('Welcome', st.session_state['lang'])}, {st.session_state.user}!**")
-        
-        # Navigation
         page = st.radio(t("📍 Navigate", st.session_state['lang']), [
-            t("📊 Collect Heritage Data", st.session_state['lang']), 
-            t("📚 Browse Corpus", st.session_state['lang']), 
+            t("📊 Collect Heritage Data", st.session_state['lang']),
+            t("📚 Browse Corpus", st.session_state['lang']),
             t("📈 View Statistics", st.session_state['lang']),
             t("👤 Profile", st.session_state['lang'])
         ])
-        
-        # Quick stats
         corpus_data = load_corpus_data()
         user_entries = [entry for entry in corpus_data if entry.get('contributor_name') == st.session_state.user]
-        
         st.markdown("---")
         st.markdown(f"### {t('📊 Quick Stats', st.session_state['lang'])}")
         st.metric(t("Your Entries", st.session_state['lang']), len(user_entries))
         st.metric(t("Total Entries", st.session_state['lang']), len(corpus_data))
-        
-        # Connection status
         try:
             requests.get("https://www.google.com", timeout=3)
             st.success(t("🌐 Online", st.session_state['lang']))
         except:
             st.warning(t("📴 Offline", st.session_state['lang']))
-        
         st.markdown("---")
         if st.button(t("🚪 Logout", st.session_state['lang'])):
             st.session_state.user = None
             st.rerun()
-        
         return page
 
 def show_location_info(location_data):
-    """Display location information"""
     if location_data:
-        st.success(t(f"📍 Detected Location: {location_data['city']}, {location_data['region']}, {location_data['country']}", st.session_state['lang']))
+        st.success(t(f"📍 Detected Location: {location_data['city']}", st.session_state['lang']))
         st.write(f"{t('**Coordinates:**', st.session_state['lang'])} {location_data['latitude']:.4f}, {location_data['longitude']:.4f}")
     else:
         st.warning(t("📍 Unable to detect location automatically", st.session_state['lang']))
 
 def show_data_collection_form():
-    """Display data collection form"""
     st.markdown(f'<div class="main-header">{t("📊 Cultural Heritage Data Collection", st.session_state["lang"])}</div>', unsafe_allow_html=True)
-    
     location_data = get_user_location()
     show_location_info(location_data)
 
     with st.form("corpus_collection_form"):
         st.subheader(t("📝 Place & Cultural Information", st.session_state['lang']))
-
         col1, col2 = st.columns(2)
         with col1:
             place_name = st.text_input(t("Place Name *", st.session_state['lang']), placeholder=t("Enter the place name", st.session_state['lang']))
@@ -381,7 +344,7 @@ def show_data_collection_form():
             ])
             language = st.text_input(t("Language", st.session_state['lang']), placeholder=t("e.g., Hindi, Telugu, English", st.session_state['lang']))
         with col2:
-            location_display = f"{location_data['city']}, {location_data['region']}" if location_data else ""
+            location_display = f"{location_data['city']}" if location_data else ""
             manual_location = st.text_input(t("Location", st.session_state['lang']), value=location_display)
             historical_period = st.selectbox(t("Historical Period", st.session_state['lang']), [
                 t("Ancient", st.session_state['lang']), t("Medieval", st.session_state['lang']),
@@ -389,8 +352,6 @@ def show_data_collection_form():
                 t("Contemporary", st.session_state['lang']), t("Unknown", st.session_state['lang'])
             ])
             tags = st.text_input(t("Tags (comma-separated)", st.session_state['lang']), placeholder=t("temple, folklore, craft, etc.", st.session_state['lang']))
-
-        # Coordinates
         col1, col2 = st.columns(2)
         with col1:
             latitude = st.number_input(t("Latitude", st.session_state['lang']), 
@@ -400,7 +361,6 @@ def show_data_collection_form():
             longitude = st.number_input(t("Longitude", st.session_state['lang']), 
                 value=location_data['longitude'] if location_data else 0.0,
                 format="%.6f")
-
         st.subheader(t("📋 Content Details", st.session_state['lang']))
         title = st.text_input(t("Title *", st.session_state['lang']), placeholder=t("Give a descriptive title", st.session_state['lang']))
         description = st.text_area(t("Description *", st.session_state['lang']), 
@@ -412,23 +372,18 @@ def show_data_collection_form():
         sources = st.text_area(t("Sources/References", st.session_state['lang']), 
             placeholder=t("Mention your sources if any", st.session_state['lang']), 
             height=100)
-
         st.subheader(t("📁 Upload Media", st.session_state['lang']))
         uploaded_files = st.file_uploader(
             t("Upload files (images, audio, video, documents)", st.session_state['lang']),
             type=['jpg', 'jpeg', 'png', 'mp4', 'mp3', 'wav', 'pdf', 'txt', 'doc', 'docx'],
             accept_multiple_files=True
         )
-
         auto_search = st.checkbox(t("🔍 Automatically fetch information from Wikipedia & OpenStreetMap", st.session_state['lang']))
-
         submitted = st.form_submit_button(t("🚀 Submit Entry", st.session_state['lang']))
-
         if submitted:
             if not place_name or not title or not description:
                 st.error(t("❌ Please fill in required fields: Place Name, Title, and Description.", st.session_state['lang']))
                 return
-
             entry = {
                 'contributor_name': st.session_state.user,
                 'place_name': place_name,
@@ -445,34 +400,25 @@ def show_data_collection_form():
                 'sources': sources,
                 'uploaded_files': []
             }
-
             entry_id = save_corpus_entry(entry)
-
-            # Handle file uploads
             if uploaded_files:
                 file_info = []
                 for uploaded_file in uploaded_files:
                     file_data = save_uploaded_file(uploaded_file, entry_id)
                     if file_data:
                         file_info.append(file_data)
-                
-                # Update entry with file info
                 corpus_data = load_corpus_data()
                 for item in corpus_data:
                     if item['id'] == entry_id:
                         item['uploaded_files'] = file_info
                         break
-                
                 with open(CORPUS_FILE, 'w', encoding='utf-8') as f:
                     json.dump(corpus_data, f, indent=2, ensure_ascii=False)
-
-            # Auto-search functionality
             if auto_search:
                 with st.spinner(t("🔍 Searching for additional information...", st.session_state['lang'])):
                     search_results = search_place_info(place_name)
                     if search_results:
                         st.success(t("✅ Additional information found!", st.session_state['lang']))
-                        
                         if 'wikipedia' in search_results:
                             wiki = search_results['wikipedia']
                             st.markdown(f"### {t('📖 Wikipedia Summary', st.session_state['lang'])}")
@@ -480,31 +426,23 @@ def show_data_collection_form():
                             st.write(wiki['extract'])
                             if wiki.get('url'):
                                 st.markdown(f"[{t('📖 Read More on Wikipedia', st.session_state['lang'])}]({wiki['url']})")
-                        
                         if 'openstreetmap' in search_results:
                             osm = search_results['openstreetmap']
                             st.markdown(f"### {t('🗺️ OpenStreetMap Information', st.session_state['lang'])}")
                             st.write(f"**{t('Location', st.session_state['lang'])}:** {osm.get('display_name', 'N/A')}")
                             st.write(f"**{t('Type', st.session_state['lang'])}:** {osm.get('type', 'N/A')}")
-
             st.success(t("✅ Entry saved successfully!", st.session_state['lang']))
             st.balloons()
             st.info(f"{t('Entry ID', st.session_state['lang'])}: {entry_id}")
 
 def show_corpus_browser():
-    """Display corpus browser"""
     st.markdown(f'<div class="main-header">{t("📚 Heritage Corpus Browser", st.session_state["lang"])}</div>', unsafe_allow_html=True)
-    
     corpus_data = load_corpus_data()
-
     if not corpus_data:
         st.info(t("📭 No corpus data available yet. Start by collecting some heritage data!", st.session_state['lang']))
         return
-
-    # Summary statistics
     st.subheader(t("📊 Corpus Summary", st.session_state['lang']))
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
         st.metric(t("Total Entries", st.session_state['lang']), len(corpus_data))
     with col2:
@@ -516,11 +454,8 @@ def show_corpus_browser():
     with col4:
         total_files = sum(len(item.get('uploaded_files', [])) for item in corpus_data)
         st.metric(t("Media Files", st.session_state['lang']), total_files)
-
-    # Filters
     st.subheader(t("🔍 Filter & Search", st.session_state['lang']))
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         search_term = st.text_input(t("🔍 Search keyword", st.session_state['lang']), placeholder=t("Search in titles and descriptions", st.session_state['lang']))
     with col2:
@@ -529,34 +464,27 @@ def show_corpus_browser():
     with col3:
         all_contributors = sorted(set(item.get('contributor_name', 'Unknown') for item in corpus_data))
         contributor_filter = st.selectbox(t("👤 Filter by Contributor", st.session_state['lang']), [t("All", st.session_state['lang'])] + all_contributors)
-
-    # Apply filters
     filtered_data = corpus_data
     if search_term:
         filtered_data = [
-            item for item in filtered_data 
-            if search_term.lower() in item.get('title', '').lower() or 
+            item for item in filtered_data
+            if search_term.lower() in item.get('title', '').lower() or
                search_term.lower() in item.get('description', '').lower()
         ]
     if category_filter != t("All", st.session_state['lang']):
         filtered_data = [item for item in filtered_data if item.get('category') == category_filter]
     if contributor_filter != t("All", st.session_state['lang']):
         filtered_data = [item for item in filtered_data if item.get('contributor_name') == contributor_filter]
-
-    # Display results
     st.subheader(f"{t('📋 Results', st.session_state['lang'])} ({len(filtered_data)} {t('entries', st.session_state['lang'])})")
-    
     for item in filtered_data:
         with st.expander(f"🏛️ {item.get('title', t('Untitled', st.session_state['lang']))} — {item.get('place_name', t('Unknown Location', st.session_state['lang']))}"):
             col1, col2 = st.columns([2, 1])
-            
             with col1:
                 st.write(f"**{t('Description', st.session_state['lang'])}:** {item.get('description', t('No description available', st.session_state['lang']))}")
                 if item.get('significance'):
                     st.write(f"**{t('Cultural Significance', st.session_state['lang'])}:** {item.get('significance')}")
                 if item.get('sources'):
                     st.write(f"**{t('Sources', st.session_state['lang'])}:** {item.get('sources')}")
-                
             with col2:
                 st.write(f"**📂 {t('Category', st.session_state['lang'])}:** {item.get('category', t('Unknown', st.session_state['lang']))}")
                 st.write(f"**📍 {t('Location', st.session_state['lang'])}:** {item.get('location', t('Unknown', st.session_state['lang']))}")
@@ -564,72 +492,51 @@ def show_corpus_browser():
                 st.write(f"**🗣️ {t('Language', st.session_state['lang'])}:** {item.get('language', t('Unknown', st.session_state['lang']))}")
                 st.write(f"**👤 {t('Contributor', st.session_state['lang'])}:** {item.get('contributor_name', t('Anonymous', st.session_state['lang']))}")
                 st.write(f"**📅 {t('Added', st.session_state['lang'])}:** {item.get('created_date', t('Unknown', st.session_state['lang']))}")
-                
                 if item.get('uploaded_files'):
                     st.write(f"**📎 {t('Files', st.session_state['lang'])}:** {len(item.get('uploaded_files', []))}")
-                
                 if item.get('tags'):
                     st.write(f"**🏷️ {t('Tags', st.session_state['lang'])}:** {', '.join(item.get('tags', []))}")
 
 def show_statistics():
-    """Display corpus statistics"""
     st.markdown(f'<div class="main-header">{t("📈 Corpus Statistics", st.session_state["lang"])}</div>', unsafe_allow_html=True)
-    
     corpus_data = load_corpus_data()
-    
     if not corpus_data:
         st.info(t("📭 No data available for statistics yet.", st.session_state['lang']))
         return
-
-    # Category distribution
     st.subheader(t("📊 Category Distribution", st.session_state['lang']))
     categories = [item.get('category', t('Unknown', st.session_state['lang'])) for item in corpus_data]
     category_counts = {}
     for cat in categories:
         category_counts[cat] = category_counts.get(cat, 0) + 1
-    
     if category_counts:
         st.bar_chart(category_counts)
-
-    # Timeline
     st.subheader(t("📅 Entries Timeline", st.session_state['lang']))
     dates = [item.get('created_date', t('Unknown', st.session_state['lang'])) for item in corpus_data]
     date_counts = {}
     for date in dates:
         date_counts[date] = date_counts.get(date, 0) + 1
-    
     if date_counts:
         st.line_chart(date_counts)
-
-    # Contributor stats
     st.subheader(t("👥 Top Contributors", st.session_state['lang']))
     contributors = [item.get('contributor_name', t('Anonymous', st.session_state['lang'])) for item in corpus_data]
     contributor_counts = {}
     for contrib in contributors:
         contributor_counts[contrib] = contributor_counts.get(contrib, 0) + 1
-    
-    # Sort by contribution count
     sorted_contributors = sorted(contributor_counts.items(), key=lambda x: x[1], reverse=True)
-    
     col1, col2 = st.columns(2)
     with col1:
         st.write(f"**{t('Contributor Rankings', st.session_state['lang'])}:**")
         for i, (name, count) in enumerate(sorted_contributors[:10], 1):
             st.write(f"{i}. {name}: {count} {t('entries', st.session_state['lang'])}")
-    
     with col2:
         if sorted_contributors:
             st.bar_chart(dict(sorted_contributors[:10]))
 
 def show_profile():
-    """Display user profile"""
     st.markdown(f'<div class="main-header">{t("👤 User Profile", st.session_state["lang"])}</div>', unsafe_allow_html=True)
-    
     corpus_data = load_corpus_data()
     user_entries = [entry for entry in corpus_data if entry.get('contributor_name') == st.session_state.user]
-    
     st.subheader(f"{t('Profile', st.session_state['lang'])}: {st.session_state.user}")
-    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric(t("Your Entries", st.session_state['lang']), len(user_entries))
@@ -639,13 +546,10 @@ def show_profile():
     with col3:
         user_files = sum(len(entry.get('uploaded_files', [])) for entry in user_entries)
         st.metric(t("Files Uploaded", st.session_state['lang']), user_files)
-    
     if user_entries:
         st.subheader(t("📝 Your Recent Entries", st.session_state['lang']))
-        # Sort by timestamp, newest first
         sorted_entries = sorted(user_entries, key=lambda x: x.get('timestamp', ''), reverse=True)
-        
-        for entry in sorted_entries[:5]:  # Show last 5 entries
+        for entry in sorted_entries[:5]:
             with st.expander(f"{entry.get('title', t('Untitled', st.session_state['lang']))} - {entry.get('created_date', t('Unknown', st.session_state['lang']))}"):
                 st.write(f"**{t('Place', st.session_state['lang'])}:** {entry.get('place_name', t('Unknown', st.session_state['lang']))}")
                 st.write(f"**{t('Category', st.session_state['lang'])}:** {entry.get('category', t('Unknown', st.session_state['lang']))}")
@@ -655,28 +559,16 @@ def show_profile():
     else:
         st.info(t("🌟 You haven't created any entries yet. Start collecting heritage data!", st.session_state['lang']))
 
-# -------------------------
-# Main Application
-# -------------------------
 def main():
-    """Main application logic"""
     apply_custom_styles()
-    
-    # Initialize session state
     if "user" not in st.session_state:
         st.session_state.user = None
-    
-    # Reset user file on startup (for demo purposes)
     if not os.path.exists(USER_FILE):
         reset_user_file()
-    
-    # Authentication check
     if not st.session_state.user:
         show_authentication()
     else:
-        # Show main application
         page = show_sidebar()
-        
         if page == t("📊 Collect Heritage Data", st.session_state['lang']):
             show_data_collection_form()
         elif page == t("📚 Browse Corpus", st.session_state['lang']):
