@@ -55,42 +55,45 @@ with st.sidebar:
     st.session_state['lang'] = selected_code
 
 # -------------------------
-# Authentication Functions
+# Supabase Authentication
 # -------------------------
-def reset_user_file():
-    pd.DataFrame(columns=["username", "password"]).to_csv(USER_FILE, index=False)
+from supabase import create_client
+from dotenv import load_dotenv
 
-def save_user(username, password):
-    username, password = username.strip(), password.strip()
-    if not (username and password):
+# Load Supabase credentials
+load_dotenv()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+def sign_up_user(email, password, username):
+    try:
+        result = supabase.auth.sign_up({
+            "email": email,
+            "password": password,
+            "options": {
+                "data": {"username": username}
+            }
+        })
+        return result
+    except Exception as e:
+        st.error(f"Signup failed: {e}")
         return None
-    if not os.path.exists(USER_FILE):
-        reset_user_file()
-    df = pd.read_csv(USER_FILE)
-    if username in df["username"].values:
-        return False
-    new_row = pd.DataFrame({
-        "username": [username],
-        "password": [password]
-    })
-    pd.concat([df, new_row], ignore_index=True).to_csv(USER_FILE, index=False)
-    return True
 
-def get_user(username):
-    if not os.path.exists(USER_FILE):
-        reset_user_file()
-    df = pd.read_csv(USER_FILE)
-    user_df = df[df["username"] == username]
-    return user_df.iloc[0] if not user_df.empty else None
-
-def login_user(username, password):
-    user = get_user(username)
-    if user is None:
-        return False
-    return user["password"] == password
+def login_user(email, password):
+    try:
+        result = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+        return result
+    except Exception as e:
+        st.error(f"Login failed: {e}")
+        return None
 
 # -------------------------
-# Location & Data Functions (Improved)
+# Location & Data Functions
 # -------------------------
 from streamlit_js_eval import get_geolocation
 
@@ -276,31 +279,32 @@ def show_authentication():
     st.markdown('<div class="main-header">🏛️ BharathVani</div>', unsafe_allow_html=True)
     with st.form("auth_form", clear_on_submit=True):
         st.markdown(f"### 🔐 {t('Authentication', st.session_state['lang'])}")
-        username = st.text_input(t("Username", st.session_state['lang']), placeholder=t("Enter your username", st.session_state['lang']))
-        password = st.text_input(t("Password", st.session_state['lang']), type="password", placeholder=t("Enter your password", st.session_state['lang']))
+        email = st.text_input("Email", placeholder=t("Enter your email", st.session_state['lang']))
+        password = st.text_input("Password", type="password", placeholder=t("Enter your password", st.session_state['lang']))
+        username = st.text_input("Preferred Username (for signup)", placeholder=t("Enter a username", st.session_state['lang']))
         col1, col2 = st.columns(2)
         with col1:
             login = st.form_submit_button(t("🔑 Login", st.session_state['lang']))
         with col2:
             signup = st.form_submit_button(t("📝 Sign Up", st.session_state['lang']))
-        if login and username and password:
-            if login_user(username, password):
-                st.session_state.user = username
+
+        if login and email and password:
+            result = login_user(email, password)
+            if result and result.user:
+                metadata = result.user.user_metadata
+                st.session_state.user = metadata.get("username") or result.user.email
                 st.success(t("Login successful!", st.session_state['lang']))
                 st.rerun()
             else:
-                st.error(t("❌ Username or password incorrect.", st.session_state['lang']))
-        elif signup and username and password:
-            result = save_user(username, password)
-            if result is None:
-                st.error(t("❌ Both username and password are required.", st.session_state['lang']))
-            elif result is False:
-                st.error(t("❌ Username already exists. Please log in.", st.session_state['lang']))
-            elif result:
-                st.session_state.user = username
-                st.success(t("Account created successfully!", st.session_state['lang']))
-                st.rerun()
-        elif (login or signup) and not (username and password):
+                st.error(t("❌ Login failed or email not verified.", st.session_state['lang']))
+
+        elif signup and email and password and username:
+            result = sign_up_user(email, password, username)
+            if result and result.user:
+                st.success(t("✅ Account created! Please verify your email before logging in.", st.session_state['lang']))
+            else:
+                st.error(t("❌ Signup failed. Email may already exist.", st.session_state['lang']))
+        elif (login or signup) and not (email and password):
             st.warning(t("⚠️ Please fill all fields!", st.session_state['lang']))
 
 def show_sidebar():
@@ -326,6 +330,7 @@ def show_sidebar():
             st.warning(t("📴 Offline", st.session_state['lang']))
         st.markdown("---")
         if st.button(t("🚪 Logout", st.session_state['lang'])):
+            supabase.auth.sign_out()
             st.session_state.user = None
             st.rerun()
         return page
@@ -364,15 +369,22 @@ def show_data_collection_form():
                 t("Contemporary", st.session_state['lang']), t("Unknown", st.session_state['lang'])
             ])
             tags = st.text_input(t("Tags (comma-separated)", st.session_state['lang']), placeholder=t("temple, folklore, craft, etc.", st.session_state['lang']))
-        col1, col2 = st.columns(2)
-        with col1:
-            latitude = st.number_input(t("Latitude", st.session_state['lang']), 
-                value=location_data['latitude'] if location_data else 0.0,
-                format="%.6f")
-        with col2:
-            longitude = st.number_input(t("Longitude", st.session_state['lang']), 
-                value=location_data['longitude'] if location_data else 0.0,
-                format="%.6f")
+        
+        # Only show latitude/longitude inputs if we have location data
+        if location_data:
+            col1, col2 = st.columns(2)
+            with col1:
+                latitude = st.number_input(t("Latitude", st.session_state['lang']), 
+                    value=location_data['latitude'],
+                    format="%.6f")
+            with col2:
+                longitude = st.number_input(t("Longitude", st.session_state['lang']), 
+                    value=location_data['longitude'],
+                    format="%.6f")
+        else:
+            latitude = 0.0
+            longitude = 0.0
+        
         st.subheader(t("📋 Content Details", st.session_state['lang']))
         title = st.text_input(t("Title *", st.session_state['lang']), placeholder=t("Give a descriptive title", st.session_state['lang']))
         description = st.text_area(t("Description *", st.session_state['lang']), 
@@ -392,10 +404,12 @@ def show_data_collection_form():
         )
         auto_search = st.checkbox(t("🔍 Automatically fetch information from Wikipedia & OpenStreetMap", st.session_state['lang']))
         submitted = st.form_submit_button(t("🚀 Submit Entry", st.session_state['lang']))
+        
         if submitted:
             if not place_name or not title or not description:
                 st.error(t("❌ Please fill in required fields: Place Name, Title, and Description.", st.session_state['lang']))
                 return
+            
             entry = {
                 'contributor_name': st.session_state.user,
                 'place_name': place_name,
@@ -412,7 +426,9 @@ def show_data_collection_form():
                 'sources': sources,
                 'uploaded_files': []
             }
+            
             entry_id = save_corpus_entry(entry)
+            
             if uploaded_files:
                 file_info = []
                 for uploaded_file in uploaded_files:
@@ -426,6 +442,7 @@ def show_data_collection_form():
                         break
                 with open(CORPUS_FILE, 'w', encoding='utf-8') as f:
                     json.dump(corpus_data, f, indent=2, ensure_ascii=False)
+            
             if auto_search:
                 with st.spinner(t("🔍 Searching for additional information...", st.session_state['lang'])):
                     search_results = search_place_info(place_name)
@@ -443,6 +460,7 @@ def show_data_collection_form():
                             st.markdown(f"### {t('🗺️ OpenStreetMap Information', st.session_state['lang'])}")
                             st.write(f"**{t('Location', st.session_state['lang'])}:** {osm.get('display_name', 'N/A')}")
                             st.write(f"**{t('Type', st.session_state['lang'])}:** {osm.get('type', 'N/A')}")
+            
             st.success(t("✅ Entry saved successfully!", st.session_state['lang']))
             st.balloons()
             st.info(f"{t('Entry ID', st.session_state['lang'])}: {entry_id}")
@@ -453,29 +471,33 @@ def show_corpus_browser():
     if not corpus_data:
         st.info(t("📭 No corpus data available yet. Start by collecting some heritage data!", st.session_state['lang']))
         return
+    
     st.subheader(t("📊 Corpus Summary", st.session_state['lang']))
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(t("Total Entries", st.session_state['lang']), len(corpus_data))
     with col2:
-        categories = set(item.get('category', 'Unknown') for item in corpus_data)
-        st.metric(t("Categories", st.session_state['lang']), len(categories))
+        all_categories = sorted(set(item.get('category', t('Unknown', st.session_state['lang'])) for item in corpus_data))
+        st.metric(t("Categories", st.session_state['lang']), len(all_categories))
     with col3:
-        locations = set(item.get('location', '') for item in corpus_data if item.get('location'))
+        locations = {item.get('location', '') for item in corpus_data if item.get('location')}
         st.metric(t("Locations", st.session_state['lang']), len(locations))
     with col4:
         total_files = sum(len(item.get('uploaded_files', [])) for item in corpus_data)
         st.metric(t("Media Files", st.session_state['lang']), total_files)
+    
     st.subheader(t("🔍 Filter & Search", st.session_state['lang']))
     col1, col2, col3 = st.columns(3)
     with col1:
         search_term = st.text_input(t("🔍 Search keyword", st.session_state['lang']), placeholder=t("Search in titles and descriptions", st.session_state['lang']))
     with col2:
-        all_categories = sorted(set(item.get('category', 'Unknown') for item in corpus_data))
+        all_categories = sorted(set(item.get('category', t('Unknown', st.session_state['lang'])) for item in corpus_data))
         category_filter = st.selectbox(t("📂 Filter by Category", st.session_state['lang']), [t("All", st.session_state['lang'])] + all_categories)
     with col3:
-        all_contributors = sorted(set(item.get('contributor_name', 'Unknown') for item in corpus_data))
+        all_contributors = sorted(set(item.get('contributor_name', t('Unknown', st.session_state['lang'])) for item in corpus_data))
+
         contributor_filter = st.selectbox(t("👤 Filter by Contributor", st.session_state['lang']), [t("All", st.session_state['lang'])] + all_contributors)
+    
     filtered_data = corpus_data
     if search_term:
         filtered_data = [
@@ -487,6 +509,7 @@ def show_corpus_browser():
         filtered_data = [item for item in filtered_data if item.get('category') == category_filter]
     if contributor_filter != t("All", st.session_state['lang']):
         filtered_data = [item for item in filtered_data if item.get('contributor_name') == contributor_filter]
+    
     st.subheader(f"{t('📋 Results', st.session_state['lang'])} ({len(filtered_data)} {t('entries', st.session_state['lang'])})")
     for item in filtered_data:
         with st.expander(f"🏛️ {item.get('title', t('Untitled', st.session_state['lang']))} — {item.get('place_name', t('Unknown Location', st.session_state['lang']))}"):
@@ -515,6 +538,7 @@ def show_statistics():
     if not corpus_data:
         st.info(t("📭 No data available for statistics yet.", st.session_state['lang']))
         return
+    
     st.subheader(t("📊 Category Distribution", st.session_state['lang']))
     categories = [item.get('category', t('Unknown', st.session_state['lang'])) for item in corpus_data]
     category_counts = {}
@@ -522,6 +546,7 @@ def show_statistics():
         category_counts[cat] = category_counts.get(cat, 0) + 1
     if category_counts:
         st.bar_chart(category_counts)
+    
     st.subheader(t("📅 Entries Timeline", st.session_state['lang']))
     dates = [item.get('created_date', t('Unknown', st.session_state['lang'])) for item in corpus_data]
     date_counts = {}
@@ -529,12 +554,14 @@ def show_statistics():
         date_counts[date] = date_counts.get(date, 0) + 1
     if date_counts:
         st.line_chart(date_counts)
+    
     st.subheader(t("👥 Top Contributors", st.session_state['lang']))
     contributors = [item.get('contributor_name', t('Anonymous', st.session_state['lang'])) for item in corpus_data]
     contributor_counts = {}
     for contrib in contributors:
         contributor_counts[contrib] = contributor_counts.get(contrib, 0) + 1
     sorted_contributors = sorted(contributor_counts.items(), key=lambda x: x[1], reverse=True)
+    
     col1, col2 = st.columns(2)
     with col1:
         st.write(f"**{t('Contributor Rankings', st.session_state['lang'])}:**")
@@ -548,6 +575,7 @@ def show_profile():
     st.markdown(f'<div class="main-header">{t("👤 User Profile", st.session_state["lang"])}</div>', unsafe_allow_html=True)
     corpus_data = load_corpus_data()
     user_entries = [entry for entry in corpus_data if entry.get('contributor_name') == st.session_state.user]
+    
     st.subheader(f"{t('Profile', st.session_state['lang'])}: {st.session_state.user}")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -558,6 +586,7 @@ def show_profile():
     with col3:
         user_files = sum(len(entry.get('uploaded_files', [])) for entry in user_entries)
         st.metric(t("Files Uploaded", st.session_state['lang']), user_files)
+    
     if user_entries:
         st.subheader(t("📝 Your Recent Entries", st.session_state['lang']))
         sorted_entries = sorted(user_entries, key=lambda x: x.get('timestamp', ''), reverse=True)
@@ -573,10 +602,16 @@ def show_profile():
 
 def main():
     apply_custom_styles()
+    
+    # Initialize session state variables
     if "user" not in st.session_state:
         st.session_state.user = None
-    if not os.path.exists(USER_FILE):
-        reset_user_file()
+    if "lang" not in st.session_state:
+        st.session_state.lang = "en"
+    
+    # Create necessary directories
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    
     if not st.session_state.user:
         show_authentication()
     else:
