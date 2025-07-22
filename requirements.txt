@@ -1,4 +1,8 @@
 streamlit
-streamlit-js-eval
 requests
 deep-translator
+python-dotenv
+supabase
+pandas
+streamlit-js-eval
+uuid
