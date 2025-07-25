@@ -85,59 +85,79 @@ def sign_up_user(email, password, username):
 
 def login_user(email, password):
     try:
-        result = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
-        return result
-    except Exception as e:
-        st.error(f"Login failed: {e}")
-        return None
+        supabase.auth.sign_out()  # Clear any previous session
 
-def login_user(email, password):
-    try:
-        # Perform the login
         auth_response = supabase.auth.sign_in_with_password({
             "email": email,
             "password": password
         })
-        
-        if auth_response.user:
-            # Store all necessary user information
-            st.session_state.user = auth_response.user.user_metadata.get("username") or auth_response.user.email
-            st.session_state.user_id = auth_response.user.id  # Crucial for RLS
-            st.session_state.supabase_session = auth_response.session
-            
-            # Update the Supabase client with the new session
-            supabase.auth.set_session(
-                auth_response.session.access_token,
-                auth_response.session.refresh_token
-            )
-            
-            st.success("Login successful!")
+
+        # Extract session and user properly
+        if auth_response and auth_response.session and auth_response.user:
+            session = auth_response.session
+            user = auth_response.user
+
+            st.session_state.update({
+                'user': user.user_metadata.get("username") or user.email,
+                'user_id': user.id,
+                'supabase_session': session,
+                'access_token': session.access_token,
+                'refresh_token': session.refresh_token,
+                'last_auth_time': datetime.now().timestamp()
+            })
+
+            # Set session explicitly
+            supabase.auth.set_session(session.access_token, session.refresh_token)
+            return
+            st.rerun()  # Force rerun to refresh UI
+
             return True
+
         return False
+
     except Exception as e:
         st.error(f"Login failed: {str(e)}")
         return False
+
     
 def verify_session():
     """Ensure we have an active authenticated session"""
     if 'user_id' not in st.session_state:
         st.error("Please log in to continue")
-        st.stop()  # This stops further execution
-        
+        st.stop()
+
     try:
-        # Refresh the session if needed
+        # First try with current session
         current_user = supabase.auth.get_user()
-        if not current_user.user:
+
+        if current_user is None or current_user.user is None:
+            # Attempt session refresh if we have refresh token
+            if 'refresh_token' in st.session_state:
+                try:
+                    auth_response = supabase.auth.refresh_session(st.session_state.refresh_token)
+                    st.write("🔄 Refresh Response:", auth_response)
+                    if auth_response and auth_response.session and auth_response.user:
+                        session = auth_response.session
+
+                        st.session_state.update({
+                            'access_token': session.access_token,
+                            'refresh_token': session.refresh_token,
+                            'last_auth_time': datetime.now().timestamp()
+                        })
+                        supabase.auth.set_session(session.access_token, session.refresh_token)
+                except Exception as refresh_error:
+                    st.warning(f"Session refresh failed: {refresh_error}")
+
+            # If we get here, session is invalid
             st.session_state.clear()
             st.error("Session expired. Please log in again.")
             st.stop()
+
     except Exception as e:
         st.session_state.clear()
-        st.error("Session verification failed")
+        st.error(f"Session verification failed: {str(e)}")
         st.stop()
+
 
 def save_corpus_entry(entry):
     verify_session()  # Check authentication first
@@ -551,84 +571,114 @@ def show_data_collection_form():
                                 st.write(f"**{t('Type', st.session_state['lang'])}:** {osm.get('type', 'N/A')}")
 
 def show_corpus_browser():
+    verify_session()  # Ensure user is authenticated
+    
     st.markdown(f'<div class="main-header">{t("📚 Heritage Corpus Browser", st.session_state["lang"])}</div>', unsafe_allow_html=True)
     
     # Search and filter controls
     st.subheader(t("🔍 Filter & Search", st.session_state['lang']))
     col1, col2, col3 = st.columns(3)
-    with col1:
-        search_term = st.text_input(t("🔍 Search keyword", st.session_state['lang']), placeholder=t("Search in titles and descriptions", st.session_state['lang']))
-    with col2:
-        all_categories = supabase.table('heritage_corpus').select('category').execute().data
-        unique_categories = sorted(set(item['category'] for item in all_categories))
-        category_filter = st.selectbox(t("📂 Filter by Category", st.session_state['lang']), [t("All", st.session_state['lang'])] + unique_categories)
-    with col3:
-        all_contributors = supabase.table('heritage_corpus').select('contributor_name').execute().data
-        unique_contributors = sorted(set(item['contributor_name'] for item in all_contributors))
-        contributor_filter = st.selectbox(t("👤 Filter by Contributor", st.session_state['lang']), [t("All", st.session_state['lang'])] + unique_contributors)
     
-    # Pagination
-    page_size = 10
-    page_number = st.number_input(t("Page", st.session_state['lang']), min_value=1, value=1)
-    offset = (page_number - 1) * page_size
-    
-    # Build query
-    query = supabase.table('heritage_corpus').select('*')
-    
-    if search_term:
-        query = query.or_(f"title.ilike.%{search_term}%,description.ilike.%{search_term}%")
-    
-    if category_filter != t("All", st.session_state['lang']):
-        query = query.eq('category', category_filter)
-    
-    if contributor_filter != t("All", st.session_state['lang']):
-        query = query.eq('contributor_name', contributor_filter)
-    
-    # Get count for pagination
-    count_query = query.select('count', count='exact')
-    total_count = count_query.execute().count
-    
-    # Apply pagination and execute query
-    query = query.range(offset, offset + page_size - 1)
-    filtered_data = query.execute().data
-    
-    # Display results
-    st.subheader(f"{t('📋 Results', st.session_state['lang'])} ({total_count} {t('entries', st.session_state['lang'])})")
-    
-    if not filtered_data:
-        st.info(t("No entries match your search criteria.", st.session_state['lang']))
-        return
-    
-    for item in filtered_data:
-        with st.expander(f"🏛️ {item.get('title', t('Untitled', st.session_state['lang']))} — {item.get('place_name', t('Unknown Location', st.session_state['lang']))}"):
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.write(f"**{t('Description', st.session_state['lang'])}:** {item.get('description', t('No description available', st.session_state['lang']))}")
-                if item.get('significance'):
-                    st.write(f"**{t('Cultural Significance', st.session_state['lang'])}:** {item.get('significance')}")
-                if item.get('sources'):
-                    st.write(f"**{t('Sources', st.session_state['lang'])}:** {item.get('sources')}")
+    try:
+        # Get categories and contributors in a single query to reduce database calls
+        meta_data = supabase.table('heritage_corpus').select('category, contributor_name').execute().data
+        
+        unique_categories = sorted(set(item['category'] for item in meta_data if 'category' in item))
+        unique_contributors = sorted(set(item['contributor_name'] for item in meta_data if 'contributor_name' in item))
+        
+        with col1:
+            search_term = st.text_input(t("🔍 Search keyword", st.session_state['lang']), 
+                                      placeholder=t("Search in titles and descriptions", st.session_state['lang']))
+        with col2:
+            category_filter = st.selectbox(t("📂 Filter by Category", st.session_state['lang']), 
+                                          [t("All", st.session_state['lang'])] + unique_categories)
+        with col3:
+            contributor_filter = st.selectbox(t("👤 Filter by Contributor", st.session_state['lang']), 
+                                             [t("All", st.session_state['lang'])] + unique_contributors)
+        
+        # Build the main query
+        query = supabase.table('heritage_corpus').select('*')
+        
+        if search_term:
+            query = query.or_(f"title.ilike.%{search_term}%,description.ilike.%{search_term}%")
+        
+        if category_filter != t("All", st.session_state['lang']):
+            query = query.eq('category', category_filter)
+        
+        if contributor_filter != t("All", st.session_state['lang']):
+            query = query.eq('contributor_name', contributor_filter)
+        
+        # Execute the query with error handling
+        try:
+            response = query.execute()
+            filtered_data = response.data if response.data else []
+            
+            if not filtered_data:
+                st.info(t("No entries found matching your criteria.", st.session_state['lang']))
+                return
+            
+            # Display results in a paginated format
+            items_per_page = 10
+            total_pages = max(1, (len(filtered_data) + items_per_page - 1) // items_per_page)
+            
+            if 'corpus_page' not in st.session_state:
+                st.session_state.corpus_page = 1
                 
-                # Display uploaded files if any
-                if item.get('uploaded_files'):
-                    st.markdown(f"**{t('📎 Attachments', st.session_state['lang'])}**")
-                    for file in item['uploaded_files']:
-                        st.markdown(f"- [{file['filename']}]({file['url']}) ({file['type']}, {file['size']/1024:.1f} KB)")
+            page = st.number_input(t("Page", st.session_state['lang']), 
+                                 min_value=1, 
+                                 max_value=total_pages, 
+                                 value=st.session_state.corpus_page,
+                                 key='corpus_page_input')
+            
+            st.session_state.corpus_page = page
+            
+            start_idx = (page - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            
+            for entry in filtered_data[start_idx:end_idx]:
+                with st.expander(f"{entry.get('title', t('Untitled', st.session_state['lang']))}"):
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if entry.get('uploaded_files'):
+                            first_file = entry['uploaded_files'][0]
+                            if first_file['type'].startswith('image'):
+                                st.image(first_file['url'], width=200)
+                            elif first_file['type'].startswith('video'):
+                                st.video(first_file['url'])
+                            elif first_file['type'].startswith('audio'):
+                                st.audio(first_file['url'])
+                    
+                    with col2:
+                        st.write(f"**{t('Place', st.session_state['lang'])}:** {entry.get('place_name', 'N/A')}")
+                        st.write(f"**{t('Category', st.session_state['lang'])}:** {entry.get('category', 'N/A')}")
+                        st.write(f"**{t('Contributor', st.session_state['lang'])}:** {entry.get('contributor_name', 'N/A')}")
+                        st.write(f"**{t('Description', st.session_state['lang'])}:**")
+                        st.write(entry.get('description', t('No description available', st.session_state['lang'])))
+                        
+                        if entry.get('latitude') and entry.get('longitude'):
+                            st.map(pd.DataFrame({
+                                'lat': [entry['latitude']],
+                                'lon': [entry['longitude']]
+                            }), zoom=12)
+            
+            st.write(f"{t('Showing entries', st.session_state['lang'])} {start_idx + 1}-{min(end_idx, len(filtered_data))} {t('of', st.session_state['lang'])} {len(filtered_data)}")
+            
+        except Exception as query_error:
+            st.error(f"{t('Error loading data:', st.session_state['lang'])} {str(query_error)}")
+            # Attempt to refresh session if it's an authentication error
+            if "401" in str(query_error):
+                st.warning(t("Session expired. Please log in again.", st.session_state['lang']))
+                supabase.auth.sign_out()
+                st.session_state.clear()
+                st.rerun()
                 
-            with col2:
-                st.write(f"**📂 {t('Category', st.session_state['lang'])}:** {item.get('category', t('Unknown', st.session_state['lang']))}")
-                st.write(f"**📍 {t('Location', st.session_state['lang'])}:** {item.get('location', t('Unknown', st.session_state['lang']))}")
-                st.write(f"**🕐 {t('Period', st.session_state['lang'])}:** {item.get('historical_period', t('Unknown', st.session_state['lang']))}")
-                st.write(f"**🗣️ {t('Language', st.session_state['lang'])}:** {item.get('language', t('Unknown', st.session_state['lang']))}")
-                st.write(f"**👤 {t('Contributor', st.session_state['lang'])}:** {item.get('contributor_name', t('Anonymous', st.session_state['lang']))}")
-                st.write(f"**📅 {t('Added', st.session_state['lang'])}:** {item.get('created_date', t('Unknown', st.session_state['lang']))}")
-                if item.get('tags'):
-                    st.write(f"**🏷️ {t('Tags', st.session_state['lang'])}:** {', '.join(item.get('tags', []))}")
-    
-    # Pagination controls
-    total_pages = (total_count + page_size - 1) // page_size
-    if total_pages > 1:
-        st.write(f"{t('Page', st.session_state['lang'])} {page_number} {t('of', st.session_state['lang'])} {total_pages}")
+    except Exception as meta_error:
+        st.error(f"{t('Error loading filter options:', st.session_state['lang'])} {str(meta_error)}")
+        if "401" in str(meta_error):
+            st.warning(t("Session expired. Please log in again.", st.session_state['lang']))
+            supabase.auth.sign_out()
+            st.session_state.clear()
+            st.rerun()
 
 def show_statistics():
     st.markdown(f'<div class="main-header">{t("📈 Corpus Statistics", st.session_state["lang"])}</div>', unsafe_allow_html=True)
@@ -820,12 +870,20 @@ def main():
         'user': None,
         'supabase_session': None,
         'lang': 'en',
-        'is_admin': False
+        'is_admin': False,
+        'access_token': None,
+        'refresh_token': None
     }
     
     for key, value in session_defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
+
+    if st.session_state.get("access_token") and st.session_state.get("refresh_token"):
+        supabase.auth.set_session(
+            st.session_state["access_token"],
+            st.session_state["refresh_token"]
+        )
 
     # Sidebar language selection
     with st.sidebar:
@@ -843,45 +901,35 @@ def main():
         selected_display = st.selectbox("Select Language", language_display, index=0)
         st.session_state['lang'] = language_codes[selected_display]
 
-    # Check authentication state
-    if not st.session_state.user_id:
+    if not st.session_state.get('user_id'):
         show_authentication()
     else:
         try:
-            # Verify and refresh session
-            if st.session_state.supabase_session:
-                supabase.auth.set_session(
-                    st.session_state.supabase_session.access_token,
-                    st.session_state.supabase_session.refresh_token
-                )
+            verify_session()
             
-            current_user = supabase.auth.get_user()
-            if not current_user.user:
-                st.session_state.clear()
-                st.rerun()
-            
-            # Get updated user metadata
-            user_metadata = supabase.auth.get_user().user.user_metadata or {}
-            st.session_state.is_admin = user_metadata.get('role') == 'admin'
-
             # Main application flow
             page = show_sidebar()
             
-            if page == t("📊 Collect Heritage Data", st.session_state['lang']):
-                show_data_collection_form()
-            elif page == t("📚 Browse Corpus", st.session_state['lang']):
-                show_corpus_browser()
-            elif page == t("📈 View Statistics", st.session_state['lang']):
-                show_statistics()
-            elif page == t("👤 Profile", st.session_state['lang']):
-                show_profile()
-            elif page == t("🛠️ Admin Panel", st.session_state['lang']) and st.session_state.is_admin:
-                show_admin_panel()
-            elif page == t("🛠️ Admin Panel", st.session_state['lang']):
-                st.warning(t("Admin access required", st.session_state['lang']))
+            try:
+                if page == t("📊 Collect Heritage Data", st.session_state['lang']):
+                    show_data_collection_form()
+                elif page == t("📚 Browse Corpus", st.session_state['lang']):
+                    show_corpus_browser()
+                elif page == t("📈 View Statistics", st.session_state['lang']):
+                    show_statistics()
+                elif page == t("👤 Profile", st.session_state['lang']):
+                    show_profile()
+                elif page == t("🛠️ Admin Panel", st.session_state['lang']):
+                    if st.session_state.is_admin:
+                        show_admin_panel()
+                    else:
+                        st.warning(t("Admin access required", st.session_state['lang']))
+            except Exception as page_error:
+                st.error(f"Page error: {str(page_error)}")
+                # Don't clear session for page-level errors
                 
-        except Exception as e:
-            st.error(f"Session error: {str(e)}")
+        except Exception as auth_error:
+            st.error(f"Authentication error: {str(auth_error)}")
             st.session_state.clear()
             st.rerun()
 
